@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.G.REDDY // DEV_RESEARCH_LAB</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        labBg: '#010204',
+                        labPanel: 'rgba(5, 9, 15, 0.65)',
+                        borderNeon: '#00f2fe',
+                        borderSubtle: '#141d26',
+                        textMain: '#e2e8f0',
+                        textMuted: '#64748b'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* =========================================
+           CORE SYSTEM & ATMOSPHERE
+           ========================================= */
+        body {
+            background-color: #010204; color: #e2e8f0;
+            overflow-x: hidden; cursor: none;
+            user-select: none;
+        }
+        
+        #webgl-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -5; pointer-events: none; }
+
+        .noise-layer {
+            position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0.04; mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        }
+        .scanlines {
+            position: fixed; inset: 0; z-index: 41; pointer-events: none; opacity: 0.1;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+        }
+        .scanner-beam {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 15vh; z-index: 42; pointer-events: none;
+            background: linear-gradient(to bottom, transparent, rgba(0, 242, 254, 0.05), transparent);
+            animation: scanBeam 8s linear infinite;
+        }
+        @keyframes scanBeam { 0% { top: -20vh; } 100% { top: 120vh; } }
+
+        /* =========================================
+           ADVANCED AI SENSOR CURSOR
+           ========================================= */
+        .cursor-dot {
+            position: fixed; top: 0; left: 0; width: 4px; height: 4px; background: #00f2fe;
+            border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); z-index: 9999;
+            box-shadow: 0 0 10px #00f2fe; transition: opacity 0.2s;
+        }
+        .cursor-ring {
+            position: fixed; top: 0; left: 0; width: 30px; height: 30px;
+            border: 1px solid rgba(0, 242, 254, 0.4); border-radius: 50%;
+            pointer-events: none; transform: translate(-50%, -50%); z-index: 9998;
+            transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+                        border-radius 0.3s, border-color 0.3s, background 0.3s, transform 0.1s ease-out;
+        }
+        .cursor-trail {
+            position: fixed; top: 0; left: 0; width: 2px; height: 2px; background: rgba(0, 242, 254, 0.5);
+            border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); z-index: 9997;
+        }
+        .cursor-label {
+            position: fixed; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #00f2fe;
+            pointer-events: none; z-index: 9999; opacity: 0; transition: opacity 0.2s;
+            text-transform: uppercase; font-weight: bold; letter-spacing: 1px;
+        }
+
+        body.cursor-card-hover .cursor-ring { width: 70px; height: 70px; border-radius: 8px; border-color: rgba(0, 242, 254, 0.2); background: rgba(0, 242, 254, 0.02); }
+        body.cursor-btn-hover .cursor-dot { opacity: 0; }
+        body.cursor-btn-hover .cursor-ring { width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 242, 254, 0.1); border-color: #00f2fe; box-shadow: inset 0 0 15px rgba(0,242,254,0.2); }
+        body.cursor-idle .cursor-ring { animation: idlePulse 2s infinite ease-out; }
+        @keyframes idlePulse { 0% { width: 30px; height: 30px; opacity: 1; } 100% { width: 80px; height: 80px; opacity: 0; } }
+
+        /* =========================================
+           HOLOGRAPHIC UI PANELS 
+           ========================================= */
+        .system-panel {
+            background-color: var(--labPanel); backdrop-filter: blur(8px);
+            border: 1px solid var(--borderSubtle); position: relative;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .system-panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #141d26; transition: background 0.3s;
+        }
+        .system-panel:hover::before { background: #00f2fe; box-shadow: 0 0 10px #00f2fe; }
+
+        .mission-module {
+            transform-style: preserve-3d; transition: border-color 0.3s; will-change: transform;
+            position: relative; overflow: hidden;
+        }
+        .mission-module > * { transform: translateZ(30px); }
+        .mission-module::after {
+            content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+            background: radial-gradient(800px circle at var(--card-x, 50%) var(--card-y, 50%), rgba(0, 242, 254, 0.08), transparent 40%);
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .mission-module:hover::after { opacity: 1; }
+        .mission-module:hover { border-color: rgba(0, 242, 254, 0.3); }
+
+        .auth-card { position: relative; overflow: hidden; transition: border-color 0.3s; display: flex; flex-direction: column; justify-content: space-between; }
+        .auth-scanner {
+            position: absolute; left: 0; top: -10px; width: 100%; height: 2px;
+            background: #00ff41; box-shadow: 0 0 15px 2px rgba(0, 255, 65, 0.6);
+            opacity: 0; pointer-events: none; z-index: 10;
+        }
+        .auth-card:hover { border-color: #00ff41; box-shadow: inset 0 0 20px rgba(0,255,65,0.05); }
+        .auth-card:hover .auth-scanner { animation: authScan 1.2s ease-in-out infinite; opacity: 1; }
+        @keyframes authScan { 0% { top: 0; opacity: 1; } 80% { top: 100%; opacity: 1; } 100% { top: 100%; opacity: 0; } }
+
+        /* Interactive Skill Network */
+        #skill-network { position: relative; width: 100%; height: 400px; }
+        .skill-node {
+            position: absolute; transform: translate(-50%, -50%);
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold;
+            color: var(--textMain); background: #05090f; border: 1px solid var(--borderSubtle);
+            padding: 8px 12px; border-radius: 4px; cursor: default;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .skill-node:hover {
+            color: #000; background: #00f2fe; border-color: #00f2fe;
+            box-shadow: 0 0 20px rgba(0,242,254,0.5); transform: translate(-50%, -50%) scale(1.1); z-index: 20;
+        }
+        .skill-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+        .skill-line { stroke: var(--borderSubtle); stroke-width: 1.5; transition: stroke 0.3s; }
+
+        /* Timeline Scanners */
+        .edu-track { position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--borderSubtle); }
+        .edu-light {
+            position: absolute; left: 6px; top: 0; width: 6px; height: 30px; border-radius: 4px;
+            background: #00f2fe; box-shadow: 0 0 15px #00f2fe; opacity: 0; transition: top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .edu-node { transition: all 0.3s; }
+        .edu-entry:hover .edu-node { background: #00f2fe; box-shadow: 0 0 10px #00f2fe; border-color: #00f2fe; }
+
+        /* System Buttons */
+        .ctrl-btn {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: bold; text-transform: uppercase;
+            padding: 12px 24px; border: 1px solid var(--borderSubtle); background: transparent; color: var(--textMuted);
+            transition: all 0.3s; position: relative; overflow: hidden; will-change: transform; display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+        }
+        .ctrl-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: rgba(0, 242, 254, 0.1); transition: left 0.4s ease;
+        }
+        .ctrl-btn:hover::before { left: 0; }
+        .ctrl-btn:hover { border-color: #00f2fe; color: #00f2fe; box-shadow: 0 0 15px rgba(0,242,254,0.2); }
+
+        /* Reveal Utils */
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal.active { opacity: 1; transform: translate(0, 0); }
+    </style>
+</head>
+<body>
+
+    <div id="webgl-container"></div>
+    <div class="noise-layer"></div>
+    <div class="scanlines"></div>
+    <div class="scanner-beam"></div>
+
+    <div class="cursor-dot" id="cursor-dot"></div>
+    <div class="cursor-ring" id="cursor-ring"></div>
+    <div class="cursor-trail" id="trail-1"></div>
+    <div class="cursor-trail" id="trail-2"></div>
+    <div class="cursor-trail" id="trail-3"></div>
+    <div class="cursor-label" id="cursor-label"></div>
+
+    <header class="fixed top-0 w-full z-50 bg-[#010204]/90 backdrop-blur-md border-b border-borderSubtle">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center font-mono text-[10px] sm:text-xs text-textMuted uppercase tracking-widest gap-4">
+            <div class="flex items-center gap-3">
+                <span class="w-2 h-2 bg-borderNeon rounded-full animate-pulse shadow-[0_0_8px_#00f2fe]"></span>
+                <span class="text-borderNeon font-bold">SYS.ONLINE</span>
+                <span class="hidden md:inline border-l border-borderSubtle pl-3">USER: S.G.REDDY</span>
+            </div>
+            <nav class="flex flex-wrap gap-4 sm:gap-6 font-bold">
+                <a href="#about" class="hover:text-borderNeon transition-colors cursor-hover-btn">About</a>
+                <a href="#network" class="hover:text-borderNeon transition-colors cursor-hover-btn">Net_Map</a>
+                <a href="#internships" class="hover:text-borderNeon transition-colors cursor-hover-btn">Internships</a>
+                <a href="#projects" class="hover:text-borderNeon transition-colors cursor-hover-btn">Projects</a>
+                <a href="#achievements" class="hover:text-borderNeon transition-colors cursor-hover-btn">Achievements</a>
+                <a href="#datalogs" class="hover:text-borderNeon transition-colors cursor-hover-btn">Logs</a>
+                <a href="#auth" class="hover:text-borderNeon transition-colors cursor-hover-btn">Auth</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 pt-40 pb-32 space-y-48">
+        
+        <section class="min-h-[70vh] flex flex-col justify-center reveal relative z-10">
+            <div class="absolute top-0 right-0 font-mono text-[10px] text-borderSubtle/50 text-right hidden lg:block leading-loose select-none">
+                UPLINK: ESTABLISHED<br>
+                LATENCY: 4ms<br>
+                SEC_PROTOCOL: ACTIVE<br>
+                CORE_TEMP: OPTIMAL
+            </div>
+
+            <div class="inline-block mb-6">
+                <p class="font-mono text-borderNeon text-xs tracking-widest uppercase border border-borderNeon/30 bg-borderNeon/5 px-3 py-1 inline-flex items-center gap-2">
+                    <i class="fas fa-microchip"></i> Software Engineering Core Initialized
+                </p>
+            </div>
+            
+            <h1 class="text-5xl md:text-8xl lg:text-[10rem] font-black uppercase tracking-tighter leading-none mb-8 text-textMain mix-blend-screen drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                Gnaneswar<br>Reddy.
+            </h1>
+            
+            <div class="font-mono text-lg md:text-2xl text-textMuted mb-12 flex items-center h-8">
+                <span class="text-borderNeon mr-3">root@sys:~#</span> 
+                <span id="typewriter" class="text-white font-bold"></span><span class="cursor-dot inline-block w-2 h-5 bg-borderNeon ml-1 animate-pulse"></span>
+            </div>
+
+            <div class="flex flex-wrap gap-4">
+                <a href="#projects" class="ctrl-btn cursor-hover-btn" data-label="Execute">
+                    <i class="fas fa-terminal"></i> Access Terminal
+                </a>
+                <a href="Mycv.pdf" download="Sidde_Gnaneswar_Reddy_CV.pdf" class="ctrl-btn cursor-hover-btn border-borderNeon text-borderNeon" data-label="Download">
+    <i class="fas fa-download"></i> Extract Data
+</a>
+                <a href="https://github.com/SiddeGnaneswarReddy" target="_blank" class="ctrl-btn px-4 cursor-hover-btn" data-label="GitHub"><i class="fab fa-github text-lg"></i></a>
+                <a href="https://www.linkedin.com/in/siddereddy07" target="_blank" class="ctrl-btn px-4 cursor-hover-btn" data-label="LinkedIn"><i class="fab fa-linkedin-in text-lg"></i></a>
+            </div>
+        </section>
+
+        <section id="about" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-8">
+                <i class="fas fa-user-astronaut text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">System Overview // About Me</h2>
+            </div>
+            
+            <div class="system-panel p-8 md:p-12 cursor-hover-card">
+                <p class="font-mono text-sm md:text-base text-textMuted leading-relaxed mb-6">
+                    I am a highly motivated software engineer and problem solver [cite: 10] pursuing my B.Tech at Lovely Professional University[cite: 51]. My technical stack includes proficiency in Java, Python, SQL, C, HTML, and CSS[cite: 7]. I specialize in developing scalable applications and performing data analytics, utilizing tools like Android Studio, Git, Tableau, Jupyter Notebook, Pandas, NumPy, and Matplotlib[cite: 8, 9].
+                </p>
+                <p class="font-mono text-sm md:text-base text-textMuted leading-relaxed">
+                    Driven by a passion for continuous learning and adaptability [cite: 10], I strive to engineer innovative solutions, optimize system performance, and extract actionable insights in fast-paced collaborative environments[cite: 10, 17]. 
+                </p>
+            </div>
+        </section>
+
+        <section id="network" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-8">
+                <i class="fas fa-project-diagram text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Skill Topology Network</h2>
+            </div>
+            <p class="font-mono text-xs text-textMuted mb-8 uppercase tracking-widest">>> Mapping technical proficiencies and frameworks...</p>
+
+            <div class="system-panel p-2">
+                <div id="skill-network" class="cursor-hover-card">
+                    <svg class="skill-svg" id="skill-lines"></svg>
+                </div>
+            </div>
+        </section>
+
+        <section id="internships" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-8">
+                <i class="fas fa-briefcase text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Deployment Log // Internships</h2>
+            </div>
+            
+            <div class="system-panel mission-module p-8 flex flex-col lg:flex-row gap-8 cursor-hover-card">
+                <div class="lg:w-1/3 border-b lg:border-b-0 lg:border-r border-borderSubtle pb-6 lg:pb-0 lg:pr-6 flex flex-col justify-between">
+                    <div>
+                        <p class="font-mono text-[10px] text-borderNeon uppercase mb-1">Jun 25 - Jul 25 [cite: 15] // Enterprise System</p>
+                        <h3 class="text-3xl font-bold text-white uppercase tracking-tight mb-4">Android Dev Internship</h3>
+                    </div>
+                    <a href="https://drive.google.com/file/d/1MG1oTGy1umzZwhg_H3PhWXedosEXoHe5/view?usp=sharing" class="ctrl-btn self-start text-xs cursor-hover-btn" data-label="Source"><i class="fas fa-external-link-alt mr-2"></i> View Certificate</a>
+                </div>
+                <div class="lg:w-2/3 flex flex-col justify-between">
+                    <p class="font-mono text-sm text-textMuted leading-relaxed mb-8">
+                        Enhanced Android application utilizing Java optimizing system to reduce crash rates by 70% and improve overall stability[cite: 16]. Leveraged Android Studio within a fast-paced environment to engineer, debug and deploy scalable Java-based environments[cite: 17]. Gained strong exposure to system-level operations and troubleshooting in enterprise environments[cite: 18]. Streamlined android application functionalities using Java, focusing on performance optimization and scalable design[cite: 19].
+                    </p>
+                    <div class="flex gap-2 font-mono text-[10px] uppercase font-bold text-textMuted flex-wrap">
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-borderNeon">Java [cite: 13]</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Rest APIs [cite: 13]</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Retrofit [cite: 13]</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">RHEL [cite: 13]</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="projects" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-8">
+                <i class="fas fa-laptop-code text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Execution Modules // My Projects</h2>
+            </div>
+            
+            <div class="grid lg:grid-cols-2 gap-8">
+                
+                <div class="system-panel mission-module p-8 flex flex-col h-full cursor-hover-card">
+                    <div class="flex justify-between items-start mb-6 border-b border-borderSubtle pb-4">
+                        <div>
+                            <p class="font-mono text-[10px] text-borderNeon uppercase mb-1">Jul 25 [cite: 22] // NLP Architecture</p>
+                            <h3 class="text-2xl font-bold text-white uppercase tracking-tight">Ticket Analytics Dashboard [cite: 21]</h3>
+                        </div>
+                    </div>
+                    <p class="font-mono text-sm text-textMuted leading-relaxed mb-8 flex-grow">
+                        Transformed a raw unstructured dataset of 8000+ plus complaints into a structured, queryable data using advanced NLP[cite: 23]. Embedded serverless LLM inference to automatically score customer sentiment and generate a 10-Word actionable summaries[cite: 24]. Developed and deployed a dynamic Data Dashboard using Stream lit and Plotly[cite: 25]. Implemented secure REST API Connections to Groq inference engine, building automated error handling and JSON-parsing safety nets[cite: 26].
+                    </p>
+                    <div class="flex gap-2 font-mono text-[10px] uppercase font-bold text-textMuted flex-wrap mb-6">
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-borderNeon">Python</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Groq LLM</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Streamlit</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Plotly</span>
+                    </div>
+                    <a href="https://github.com/SiddeGnaneswarReddy/Customer-Sentiment-Ticket-Analytics-Dashboard" class="ctrl-btn px-4 py-2 text-xs cursor-hover-btn self-start w-full text-center justify-center" data-label="Source"><i class="fab fa-github"></i> Source Code</a>
+                </div>
+
+                <div class="system-panel mission-module p-8 flex flex-col h-full cursor-hover-card">
+                    <div class="flex justify-between items-start mb-6 border-b border-borderSubtle pb-4">
+                        <div>
+                            <p class="font-mono text-[10px] text-borderNeon uppercase mb-1">Feb 25 [cite: 32] // Core Logic</p>
+                            <h3 class="text-2xl font-bold text-white uppercase tracking-tight">OOP Java Audio Engine [cite: 27]</h3>
+                        </div>
+                    </div>
+                    <p class="font-mono text-sm text-textMuted leading-relaxed mb-8 flex-grow">
+                        Planned a comprehensive object-oriented music playback engine in Java utilizing Encapsulation and Collections Framework to securely manage dynamic playlists and sequential navigation[cite: 28]. Orchestrated a robust command line-interface governed by strict state-management via Enums to completely prevent run-time logic errors[cite: 29]. Designed an interactive console execution loop with comprehensive error handling to prevent runtime exceptions[cite: 30].
+                    </p>
+                    <div class="flex gap-2 font-mono text-[10px] uppercase font-bold text-textMuted flex-wrap mb-6">
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-borderNeon">Java</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">OOP</span>
+                        <span class="border border-borderSubtle px-2 py-1 bg-labBg text-white">Collections Framework [cite: 31]</span>
+                    </div>
+                    <a href="https://github.com/SiddeGnaneswarReddy/Java-OOP-Audio-Engine" class="ctrl-btn px-4 py-2 text-xs cursor-hover-btn self-start w-full text-center justify-center" data-label="Source"><i class="fab fa-github"></i> Source Code</a>
+                </div>
+
+            </div>
+        </section>
+
+        <section id="achievements" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-8">
+                <i class="fas fa-trophy text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Honor Board // Achievements</h2>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="system-panel auth-card p-6 cursor-hover-card h-full">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-lg">Naukri Campus Young Turks [cite: 45]</h3>
+                            <i class="fas fa-medal text-borderNeon text-2xl drop-shadow-[0_0_8px_#00f2fe]"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-borderNeon uppercase mb-4">Nov 24 [cite: 46]</p>
+                        <p class="font-mono text-sm text-textMuted leading-relaxed mb-6">
+                            Achieved 97.5 percentile in Naukri campus Young Turks attitude competition organized in Naukri campus[cite: 47].
+                        </p>
+                    </div>
+                    <a href="https://drive.google.com/file/d/1bwvN4Aoy1SQe8A0IJ26hqdqRSVzZBHPI/view?usp=sharing" class="ctrl-btn text-[10px] px-3 py-2 w-full text-center justify-center border-borderSubtle hover:border-borderNeon"><i class="fas fa-external-link-alt"></i> View Achievement</a>
+                </div>
+
+                <div class="system-panel auth-card p-6 cursor-hover-card h-full">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-lg">LeetCode Problem Solving [cite: 47]</h3>
+                            <i class="fas fa-code text-borderNeon text-2xl drop-shadow-[0_0_8px_#00f2fe]"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-borderNeon uppercase mb-4">Nov 24 [cite: 48]</p>
+                        <p class="font-mono text-sm text-textMuted leading-relaxed mb-6">
+                            Solved 100+ plus problems across various Data Structures and Algorithms, Demonstrating Strong Problem-Solving skills[cite: 49].
+                        </p>
+                    </div>
+                    <a href="https://leetcode.com/u/siddegnaneswarreddy/" class="ctrl-btn text-[10px] px-3 py-2 w-full text-center justify-center border-borderSubtle hover:border-borderNeon"><i class="fas fa-external-link-alt"></i> View Profile</a>
+                </div>
+            </div>
+        </section>
+
+        <section id="datalogs" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-10">
+                <i class="fas fa-graduation-cap text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Academic Database Log</h2>
+            </div>
+
+            <div class="system-panel p-8 relative font-mono" id="edu-container">
+                <div class="edu-track"></div>
+                <div class="edu-light" id="edu-light"></div>
+
+                <div class="edu-entry relative pl-10 mb-12 cursor-hover-btn" data-label="Scan">
+                    <div class="edu-node absolute left-[5px] top-1.5 w-2 h-2 bg-textMuted border border-bgLab rounded-full z-10"></div>
+                    <div class="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-3">
+                        <span class="text-[10px] bg-borderSubtle text-borderNeon px-2 py-1 rounded-sm uppercase tracking-widest">Aug '23 - Mar '27 [cite: 58]</span>
+                        <h3 class="text-xl font-bold text-white uppercase">B.Tech Program [cite: 52]</h3>
+                    </div>
+                    <p class="text-sm text-textMuted uppercase tracking-widest mb-3">Lovely Professional University [cite: 51]</p>
+                    <div class="inline-flex items-center gap-3 bg-labBg border border-borderSubtle px-3 py-1.5 text-xs">
+                        <span class="text-textMuted">CGPA_METRIC:</span>
+                        <span class="text-[#00ff41] font-bold">7.05 [cite: 52]</span>
+                    </div>
+                </div>
+
+                <div class="edu-entry relative pl-10 mb-12 cursor-hover-btn" data-label="Scan">
+                    <div class="edu-node absolute left-[5px] top-1.5 w-2 h-2 bg-textMuted border border-bgLab rounded-full z-10"></div>
+                    <div class="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-3">
+                        <span class="text-[10px] bg-borderSubtle text-white px-2 py-1 rounded-sm uppercase tracking-widest">Jun '21 - Mar '23 [cite: 58]</span>
+                        <h3 class="text-xl font-bold text-white uppercase">Intermediate Education [cite: 54]</h3>
+                    </div>
+                    <p class="text-sm text-textMuted uppercase tracking-widest mb-3">Sri Chaitanya Junior College [cite: 53] - Vijayawada, AP [cite: 58]</p>
+                    <div class="inline-flex items-center gap-3 bg-labBg border border-borderSubtle px-3 py-1.5 text-xs">
+                        <span class="text-textMuted">SCORE_MATRIX:</span>
+                        <span class="text-[#00ff41] font-bold">95.1% [cite: 54]</span>
+                    </div>
+                </div>
+
+                <div class="edu-entry relative pl-10 cursor-hover-btn" data-label="Scan">
+                    <div class="edu-node absolute left-[5px] top-1.5 w-2 h-2 bg-textMuted border border-bgLab rounded-full z-10"></div>
+                    <div class="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-3">
+                        <span class="text-[10px] bg-borderSubtle text-white px-2 py-1 rounded-sm uppercase tracking-widest">Jun '20 - Mar '21 [cite: 60]</span>
+                        <h3 class="text-xl font-bold text-white uppercase">Matriculation [cite: 56]</h3>
+                    </div>
+                    <p class="text-sm text-textMuted uppercase tracking-widest mb-3">Viswa Barati High School [cite: 55] - Gudivada, AP [cite: 59]</p>
+                    <div class="inline-flex items-center gap-3 bg-labBg border border-borderSubtle px-3 py-1.5 text-xs">
+                        <span class="text-textMuted">SCORE_MATRIX:</span>
+                        <span class="text-[#00ff41] font-bold">100% [cite: 56]</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="auth" class="reveal z-10 relative">
+            <div class="flex items-center gap-4 border-b border-borderSubtle pb-4 mb-10">
+                <i class="fas fa-fingerprint text-borderNeon text-xl"></i>
+                <h2 class="text-3xl font-bold uppercase tracking-wide text-white">Verification Terminal // Certs</h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                <div class="system-panel auth-card p-6 cursor-hover-card">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-sm">Python for DS & ML [cite: 34]</h3>
+                            <i class="fab fa-python text-borderSubtle text-lg"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-textMuted uppercase mb-6">Certification // Mar 26 [cite: 39]</p>
+                    </div>
+                    <div class="border-t border-borderSubtle pt-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center font-mono text-[10px] uppercase font-bold">
+                            <span class="text-textMuted">AUTH_ID: 01</span>
+                            <span class="status-text text-[#ffb000] content-none before:content-['[VERIFIED]'] transition-colors"></span>
+                        </div>
+                        <a href="#" class="ctrl-btn text-[9px] px-2 py-1 text-center justify-center w-full"><i class="fas fa-external-link-alt"></i> Verify</a>
+                    </div>
+                </div>
+
+                <div class="system-panel auth-card p-6 cursor-hover-card">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-sm">SQL Certificate [cite: 35]</h3>
+                            <i class="fas fa-database text-borderSubtle text-lg"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-textMuted uppercase mb-6">HackerRank // Jan 26 [cite: 40]</p>
+                    </div>
+                    <div class="border-t border-borderSubtle pt-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center font-mono text-[10px] uppercase font-bold">
+                            <span class="text-textMuted">AUTH_ID: 02</span>
+                            <span class="status-text text-[#ffb000] content-none before:content-['[VERIFIED]'] transition-colors"></span>
+                        </div>
+                        <a href="https://drive.google.com/file/d/18qrGq4GkDMPLf1lyH3RSFQVAMPOCpVeq/view?usp=sharing" class="ctrl-btn text-[9px] px-2 py-1 text-center justify-center w-full"><i class="fas fa-external-link-alt"></i> Verify</a>
+                    </div>
+                </div>
+
+                <div class="system-panel auth-card p-6 cursor-hover-card">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-sm">DSA with Java [cite: 36]</h3>
+                            <i class="fab fa-java text-borderSubtle text-lg"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-textMuted uppercase mb-6">Certification // Jun 24 [cite: 41]</p>
+                    </div>
+                    <div class="border-t border-borderSubtle pt-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center font-mono text-[10px] uppercase font-bold">
+                            <span class="text-textMuted">AUTH_ID: 03</span>
+                            <span class="status-text text-[#ffb000] content-none before:content-['[VERIFIED]'] transition-colors"></span>
+                        </div>
+                        <a href="" class="ctrl-btn text-[9px] px-2 py-1 text-center justify-center w-full"><i class="fas fa-external-link-alt"></i> Verify</a>
+                    </div>
+                </div>
+
+                <div class="system-panel auth-card p-6 cursor-hover-card">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-sm">Computer Programming [cite: 37]</h3>
+                            <i class="fas fa-laptop-code text-borderSubtle text-lg"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-textMuted uppercase mb-6">Certification // May 24 [cite: 42]</p>
+                    </div>
+                    <div class="border-t border-borderSubtle pt-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center font-mono text-[10px] uppercase font-bold">
+                            <span class="text-textMuted">AUTH_ID: 04</span>
+                            <span class="status-text text-[#ffb000] content-none before:content-['[VERIFIED]'] transition-colors"></span>
+                        </div>
+                        <a href="https://drive.google.com/file/d/1Uw3mQ0TlIijJszT8_0e9glOC98McTouS/view?usp=sharing" class="ctrl-btn text-[9px] px-2 py-1 text-center justify-center w-full"><i class="fas fa-external-link-alt"></i> Verify</a>
+                    </div>
+                </div>
+
+                <div class="system-panel auth-card p-6 cursor-hover-card">
+                    <div class="auth-scanner"></div>
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-white uppercase tracking-wide text-sm">Data Analytic Job Sim [cite: 38]</h3>
+                            <i class="fas fa-chart-line text-borderSubtle text-lg"></i>
+                        </div>
+                        <p class="font-mono text-[10px] text-textMuted uppercase mb-6">Forage // Aug 23 [cite: 43]</p>
+                    </div>
+                    <div class="border-t border-borderSubtle pt-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center font-mono text-[10px] uppercase font-bold">
+                            <span class="text-textMuted">AUTH_ID: 05</span>
+                            <span class="status-text text-[#ffb000] content-none before:content-['[VERIFIED]'] transition-colors"></span>
+                        </div>
+                        <a href="https://drive.google.com/file/d/1mthWvzNHrOf1edumW-J3jJ58GFj5ytSl/view?usp=sharing" class="ctrl-btn text-[9px] px-2 py-1 text-center justify-center w-full"><i class="fas fa-external-link-alt"></i> Verify</a>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="py-16 reveal border-t border-borderSubtle z-10 relative">
+            <div class="text-center mb-12">
+                <p class="font-mono text-borderNeon mb-3 text-xs tracking-widest uppercase font-bold"><i class="fas fa-broadcast-tower mr-2"></i>Comm_Link_Ready</p>
+                <h2 class="text-5xl font-black uppercase tracking-tighter text-white">Transmit Data</h2>
+            </div>
+            
+            <div class="flex flex-col md:flex-row justify-center gap-8 font-mono text-sm uppercase font-bold tracking-widest">
+                <a href="mailto:gnaneswar.sidde@gmail.com" class="ctrl-btn cursor-hover-btn" data-label="Connect">
+                    <i class="fas fa-envelope text-borderNeon text-lg"></i> gnaneswar.sidde@gmail.com [cite: 11]
+                </a>
+                <a href="tel:+919705017494" class="ctrl-btn cursor-hover-btn" data-label="Dial">
+                    <i class="fas fa-phone text-borderNeon text-lg"></i> +919705017494 [cite: 11]
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-borderSubtle bg-labBg py-8 z-40 relative">
+        <div class="max-w-7xl mx-auto px-6 flex justify-between font-mono text-[10px] text-textMuted uppercase tracking-widest font-bold">
+            <span>Terminal Sequence End</span>
+            <span>&copy; 2026 // S.G.R.</span>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            
+            const initThreeJS = () => {
+                const container = document.getElementById('webgl-container');
+                const scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2(0x010204, 0.0015);
+
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
+                camera.position.z = 400;
+                camera.position.y = 50;
+
+                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                container.appendChild(renderer.domElement);
+
+                const gridHelper = new THREE.GridHelper(2000, 40, 0x00f2fe, 0x141d26);
+                gridHelper.position.y = -150;
+                scene.add(gridHelper);
+
+                const particleCount = window.innerWidth < 768 ? 100 : 250;
+                const particlesGeometry = new THREE.BufferGeometry();
+                const particlePositions = new Float32Array(particleCount * 3);
+                const particleVelocities = [];
+
+                for(let i = 0; i < particleCount; i++) {
+                    particlePositions[i*3] = (Math.random() - 0.5) * 1200; 
+                    particlePositions[i*3+1] = (Math.random() - 0.5) * 600 + 50; 
+                    particlePositions[i*3+2] = (Math.random() - 0.5) * 800; 
+                    
+                    particleVelocities.push({
+                        x: (Math.random() - 0.5) * 0.5,
+                        y: (Math.random() - 0.5) * 0.5,
+                        z: (Math.random() - 0.5) * 0.5
+                    });
+                }
+                
+                particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+                const particleMaterial = new THREE.PointsMaterial({
+                    color: 0x00f2fe, size: 3, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending
+                });
+                const particles = new THREE.Points(particlesGeometry, particleMaterial);
+                scene.add(particles);
+
+                const linesGeometry = new THREE.BufferGeometry();
+                const maxLines = particleCount * 5; 
+                const linePositions = new Float32Array(maxLines * 6);
+                linesGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0x00f2fe, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending
+                });
+                const lines = new THREE.LineSegments(linesGeometry, lineMaterial);
+                scene.add(lines);
+
+                let targetX = 0;
+                let targetY = 0;
+                let windowHalfX = window.innerWidth / 2;
+                let windowHalfY = window.innerHeight / 2;
+
+                window.addEventListener('mousemove', (e) => {
+                    targetX = (e.clientX - windowHalfX) * 0.1;
+                    targetY = (e.clientY - windowHalfY) * 0.1;
+                });
+
+                window.addEventListener('resize', () => {
+                    windowHalfX = window.innerWidth / 2;
+                    windowHalfY = window.innerHeight / 2;
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                const animate = () => {
+                    requestAnimationFrame(animate);
+
+                    camera.position.x += (targetX - camera.position.x) * 0.02;
+                    camera.position.y += (-targetY + 50 - camera.position.y) * 0.02;
+                    camera.lookAt(scene.position);
+
+                    gridHelper.position.z += 0.5;
+                    if(gridHelper.position.z > 50) gridHelper.position.z = 0;
+
+                    const positions = particles.geometry.attributes.position.array;
+                    let lineIndex = 0;
+
+                    for(let i = 0; i < particleCount; i++) {
+                        positions[i*3] += particleVelocities[i].x;
+                        positions[i*3+1] += particleVelocities[i].y;
+                        positions[i*3+2] += particleVelocities[i].z;
+
+                        if(positions[i*3] > 600 || positions[i*3] < -600) particleVelocities[i].x *= -1;
+                        if(positions[i*3+1] > 400 || positions[i*3+1] < -200) particleVelocities[i].y *= -1;
+                        if(positions[i*3+2] > 400 || positions[i*3+2] < -400) particleVelocities[i].z *= -1;
+
+                        for(let j = i + 1; j < particleCount; j++) {
+                            const dx = positions[i*3] - positions[j*3];
+                            const dy = positions[i*3+1] - positions[j*3+1];
+                            const dz = positions[i*3+2] - positions[j*3+2];
+                            const distSq = dx*dx + dy*dy + dz*dz;
+
+                            if(distSq < 10000 && lineIndex < maxLines) {
+                                linePositions[lineIndex * 6] = positions[i*3];
+                                linePositions[lineIndex * 6 + 1] = positions[i*3+1];
+                                linePositions[lineIndex * 6 + 2] = positions[i*3+2];
+                                linePositions[lineIndex * 6 + 3] = positions[j*3];
+                                linePositions[lineIndex * 6 + 4] = positions[j*3+1];
+                                linePositions[lineIndex * 6 + 5] = positions[j*3+2];
+                                lineIndex++;
+                            }
+                        }
+                    }
+
+                    particles.geometry.attributes.position.needsUpdate = true;
+                    lines.geometry.setDrawRange(0, lineIndex * 2);
+                    lines.geometry.attributes.position.needsUpdate = true;
+                    renderer.render(scene, camera);
+                };
+                animate();
+            };
+
+            if(window.innerWidth > 768) {
+                initThreeJS();
+            }
+
+            const dot = document.getElementById('cursor-dot');
+            const ring = document.getElementById('cursor-ring');
+            const trails = [
+                document.getElementById('trail-1'),
+                document.getElementById('trail-2'),
+                document.getElementById('trail-3')
+            ];
+            const label = document.getElementById('cursor-label');
+            
+            let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+            let ringX = mouseX, ringY = mouseY;
+            let trailPos = [{x:mouseX, y:mouseY}, {x:mouseX, y:mouseY}, {x:mouseX, y:mouseY}];
+            
+            let isIdle = false;
+            let idleTimeout;
+
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX; mouseY = e.clientY;
+                dot.style.transform = `translate(calc(-50% + ${mouseX}px), calc(-50% + ${mouseY}px))`;
+                label.style.transform = `translate(calc(${mouseX}px + 20px), calc(${mouseY}px - 20px))`;
+
+                document.body.classList.remove('cursor-idle');
+                clearTimeout(idleTimeout);
+                idleTimeout = setTimeout(() => { document.body.classList.add('cursor-idle'); }, 2000);
+            });
+
+            const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+
+            function renderCursor() {
+                ringX = lerp(ringX, mouseX, 0.15);
+                ringY = lerp(ringY, mouseY, 0.15);
+                ring.style.transform = `translate(calc(-50% + ${ringX}px), calc(-50% + ${ringY}px))`;
+
+                trailPos[0].x = lerp(trailPos[0].x, mouseX, 0.3);
+                trailPos[0].y = lerp(trailPos[0].y, mouseY, 0.3);
+                trailPos[1].x = lerp(trailPos[1].x, trailPos[0].x, 0.3);
+                trailPos[1].y = lerp(trailPos[1].y, trailPos[0].y, 0.3);
+                trailPos[2].x = lerp(trailPos[2].x, trailPos[1].x, 0.3);
+                trailPos[2].y = lerp(trailPos[2].y, trailPos[1].y, 0.3);
+
+                trails.forEach((trail, i) => {
+                    trail.style.transform = `translate(calc(-50% + ${trailPos[i].x}px), calc(-50% + ${trailPos[i].y}px))`;
+                });
+                requestAnimationFrame(renderCursor);
+            }
+            renderCursor();
+
+            document.querySelectorAll('.cursor-hover-card').forEach(el => {
+                el.addEventListener('mouseenter', () => document.body.classList.add('cursor-card-hover'));
+                el.addEventListener('mouseleave', () => document.body.classList.remove('cursor-card-hover'));
+            });
+
+            document.querySelectorAll('.cursor-hover-btn').forEach(btn => {
+                btn.addEventListener('mousemove', (e) => {
+                    const rect = btn.getBoundingClientRect();
+                    const x = e.clientX - rect.left - rect.width / 2;
+                    const y = e.clientY - rect.top - rect.height / 2;
+                    btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+                });
+                btn.addEventListener('mouseenter', () => {
+                    document.body.classList.add('cursor-btn-hover');
+                    if(btn.dataset.label) {
+                        label.textContent = `[${btn.dataset.label}]`;
+                        label.style.opacity = '1';
+                    }
+                });
+                btn.addEventListener('mouseleave', () => {
+                    document.body.classList.remove('cursor-btn-hover');
+                    label.style.opacity = '0';
+                    btn.style.transform = `translate(0, 0)`;
+                });
+            });
+
+            const skillData = [
+                { id: 'core', label: 'CORE_RUNTIME', cat: 'center', x: 50, y: 50 },
+                { id: 'java', label: 'Java', cat: 'prog', x: 20, y: 30 },
+                { id: 'py', label: 'Python', cat: 'prog', x: 10, y: 50 },
+                { id: 'c', label: 'C', cat: 'prog', x: 25, y: 70 },
+                { id: 'sql', label: 'SQL', cat: 'prog', x: 5, y: 80 },
+                { id: 'web', label: 'HTML/CSS', cat: 'prog', x: 80, y: 25 },
+                { id: 'pd', label: 'Pandas', cat: 'data', x: 95, y: 15 },
+                { id: 'np', label: 'NumPy', cat: 'data', x: 75, y: 10 },
+                { id: 'tb', label: 'Tableau', cat: 'tool', x: 75, y: 80 },
+                { id: 'andr', label: 'Android Studio', cat: 'tool', x: 90, y: 90 },
+                { id: 'git', label: 'Git', cat: 'tool', x: 30, y: 15 },
+            ];
+
+            const connections = [
+                ['core', 'java'], ['core', 'py'], ['core', 'sql'], ['core', 'web'], ['core', 'tb'], ['core', 'git'], ['core', 'andr'],
+                ['java', 'c'], ['java', 'andr'],
+                ['py', 'pd'], ['py', 'np'],
+                ['sql', 'c'], ['sql', 'tb'],
+                ['pd', 'np']
+            ];
+
+            const networkContainer = document.getElementById('skill-network');
+            const svgLayer = document.getElementById('skill-lines');
+            const nodesMap = {};
+
+            skillData.forEach(node => {
+                const el = document.createElement('div');
+                el.className = `skill-node ${node.id === 'core' ? 'border-borderNeon text-borderNeon shadow-[0_0_10px_#00f2fe]' : ''}`;
+                el.textContent = node.label;
+                el.style.left = `${node.x}%`;
+                el.style.top = `${node.y}%`;
+                networkContainer.appendChild(el);
+                nodesMap[node.id] = { el, x: node.x, y: node.y };
+                
+                el.style.animation = `floatNode ${3 + Math.random()*2}s ease-in-out infinite alternate`;
+                el.style.animationDelay = `${Math.random()}s`;
+            });
+
+            const styleSheet = document.createElement("style");
+            styleSheet.innerText = `@keyframes floatNode { 0% { transform: translate(-50%, calc(-50% - 5px)); } 100% { transform: translate(-50%, calc(-50% + 5px)); } }`;
+            document.head.appendChild(styleSheet);
+
+            const drawLines = () => {
+                svgLayer.innerHTML = '';
+                connections.forEach(([id1, id2]) => {
+                    const n1 = nodesMap[id1];
+                    const n2 = nodesMap[id2];
+                    
+                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    line.setAttribute("x1", `${n1.x}%`);
+                    line.setAttribute("y1", `${n1.y}%`);
+                    line.setAttribute("x2", `${n2.x}%`);
+                    line.setAttribute("y2", `${n2.y}%`);
+                    line.setAttribute("class", "skill-line");
+                    
+                    n1.el.addEventListener('mouseenter', () => { line.style.stroke = '#00f2fe'; line.style.strokeWidth = '2'; });
+                    n1.el.addEventListener('mouseleave', () => { line.style.stroke = 'var(--borderSubtle)'; line.style.strokeWidth = '1.5'; });
+                    n2.el.addEventListener('mouseenter', () => { line.style.stroke = '#00f2fe'; line.style.strokeWidth = '2'; });
+                    n2.el.addEventListener('mouseleave', () => { line.style.stroke = 'var(--borderSubtle)'; line.style.strokeWidth = '1.5'; });
+
+                    svgLayer.appendChild(line);
+                });
+            };
+            drawLines();
+            window.addEventListener('resize', drawLines);
+
+            document.querySelectorAll('.mission-module').forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left; 
+                    const y = e.clientY - rect.top;
+                    
+                    card.style.setProperty('--card-x', `${x}px`);
+                    card.style.setProperty('--card-y', `${y}px`);
+
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    const rotateX = ((y - centerY) / centerY) * -4; 
+                    const rotateY = ((x - centerX) / centerX) * 4;
+
+                    card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg)`;
+                });
+            });
+
+            const eduLight = document.getElementById('edu-light');
+            const eduContainer = document.getElementById('edu-container');
+            
+            document.querySelectorAll('.edu-entry').forEach(entry => {
+                entry.addEventListener('mouseenter', () => {
+                    const containerRect = eduContainer.getBoundingClientRect();
+                    const entryRect = entry.getBoundingClientRect();
+                    const offsetTop = entryRect.top - containerRect.top;
+                    
+                    eduLight.style.opacity = '1';
+                    eduLight.style.top = `${offsetTop + 6}px`;
+                });
+            });
+            eduContainer.addEventListener('mouseleave', () => {
+                eduLight.style.opacity = '0';
+            });
+
+            const roles = ["SOFTWARE_ENGINEER  ", "ANDROID_DEVELOPER  ", "DATA_ANALYST  "];
+            const typeWriterElement = document.getElementById("typewriter");
+            let roleIndex = 0, charIndex = 0, isDeleting = false;
+
+            function type() {
+                const currentRole = roles[roleIndex];
+                if (isDeleting) {
+                    typeWriterElement.textContent = currentRole.substring(0, charIndex - 1);
+                    charIndex--;
+                } else {
+                    typeWriterElement.textContent = currentRole.substring(0, charIndex + 1);
+                    charIndex++;
+                }
+
+                let typingSpeed = isDeleting ? 30 : 80;
+
+                if (!isDeleting && charIndex === currentRole.length) {
+                    typingSpeed = 2500; isDeleting = true;
+                } else if (isDeleting && charIndex === 0) {
+                    isDeleting = false; roleIndex = (roleIndex + 1) % roles.length; typingSpeed = 500;
+                }
+                setTimeout(type, typingSpeed);
+            }
+            setTimeout(type, 1500);
+
+            const revealObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        revealObserver.unobserve(entry.target); 
+                    }
+                });
+            }, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
+
+            document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+        });
+    </script>
+</body>
+</html>
